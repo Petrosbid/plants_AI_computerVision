@@ -1,0 +1,43 @@
+# config/params.yaml
+
+# 1. Project Settings
+project_name: "Plant_Disease_Detection"
+experiment_name: "EfficientNetV2B3_v1"
+
+# 2. Data Settings
+# (مسیر دیتاستی که در آن پوشه‌های هر کلاس قرار دارند)
+data_dir: "data/plant_village_dataset"
+validation_split: 0.2
+seed: 42
+
+# 3. Model Architecture
+model_type: "EfficientNetV2B3"
+input_shape: [300, 300, 3] # EfficientNetV2B3 ورودی (300,300) را دوست دارد
+include_top: False
+pooling: "avg"
+weights: "imagenet"
+dropout_1: 0.3
+dense_1: 512
+dropout_2: 0.2
+# (تعداد کلاس‌ها به صورت خودکار از دیتاست خوانده می‌شود)
+
+# 4. Data Pipeline
+batch_size: 32
+buffer_size: "AUTOTUNE" # (از tf.data.AUTOTUNE استفاده می‌کند)
+
+# 5. Training Phase 1: Head Training
+lr_head: 0.001
+epochs_head: 15
+
+# 6. Training Phase 2: Fine-Tuning
+fine_tune_at_layer: 100 # (100 لایه آخر را باز می‌کند)
+lr_fine_tune: 0.00001 # (1e-5)
+epochs_fine_tune: 30 # (تعداد کل اپوک‌ها، مثلا 15+30=45)
+
+# 7. Callbacks
+early_stopping_patience: 10
+reduce_lr_patience: 4
+reduce_lr_factor: 0.2
+
+# 8. Output
+model_output_dir: "models/"
