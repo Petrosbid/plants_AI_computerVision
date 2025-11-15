@@ -17,7 +17,7 @@ from src.utils.callbacks import create_callbacks
 
 # --- 1. بارگذاری تنظیمات و راه‌اندازی MLflow ---
 print("Loading configuration...")
-with open("config/params.yaml") as f:
+with open("config/params.yaml", "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
 print("Setting up MLflow...")
