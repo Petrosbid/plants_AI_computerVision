@@ -1,84 +1,127 @@
 # src/model_architecture.py
 
-import tensorflow as tf
-from tensorflow.keras.layers import Dense, Dropout, Input
-from tensorflow.keras.models import Model
-from tensorflow.keras.applications import EfficientNetV2B3  # می‌توانید مدل را تغییر دهید
+import torch
+import torch.nn as nn
+import torchvision.models as models
+from torchsummary import summary
+
+
+class PlantDiseaseModel(nn.Module):
+    """
+    A custom model for plant disease detection using a pre-trained EfficientNetV2 backbone
+    with a custom classifier head.
+    """
+    def __init__(self, config, num_classes):
+        super(PlantDiseaseModel, self).__init__()
+
+        # Load pre-trained EfficientNetV2B3 model
+        self.base_model = models.efficientnet_v2_s(pretrained=True)  # Using EfficientNetV2-S which is similar to B3
+
+        # Freeze all layers initially for transfer learning phase
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+
+        # Get the number of features from the last layer of the base model
+        num_features = self.base_model.classifier[1].in_features
+
+        # Replace the classifier head with our custom architecture
+        self.dropout1 = nn.Dropout(p=config['dropout_1'])
+        self.dense1 = nn.Linear(num_features, config['dense_1'])
+        self.relu = nn.ReLU()
+        self.dropout2 = nn.Dropout(p=config['dropout_2'])
+        self.output_layer = nn.Linear(config['dense_1'], num_classes)
+        self.softmax = nn.Softmax(dim=1)
+
+        # Replace the base model's classifier
+        self.base_model.classifier = nn.Identity()  # Remove original classifier
+
+    def forward(self, x):
+        x = self.base_model(x)
+        x = self.dropout1(x)
+        x = self.dense1(x)
+        x = self.relu(x)
+        x = self.dropout2(x)
+        x = self.output_layer(x)
+        x = self.softmax(x)
+        return x
 
 
 def build_model(config, num_classes):
     """
-    مدل SOTA را بر اساس تنظیمات می‌سازد (مرحله اول: فریز شده).
+    Builds the model based on the configuration (initially frozen for transfer learning).
     """
-    input_shape = tuple(config['input_shape'])
-
-    # 1. ورودی
-    inputs = Input(shape=input_shape, name="input_layer")
-
-    # 2. مدل پایه (Base Model)
-    # EfficientNetV2 ورودی‌های [0, 255] را انتظار دارد
-    base_model = EfficientNetV2B3(
-        include_top=config['include_top'],
-        weights=config['weights'],
-        input_tensor=inputs,
-        pooling=config['pooling']
-    )
-
-    # فریز کردن مدل پایه
-    base_model.trainable = False
-
-    # 3. "سر" جدید (New Head)
-    x = base_model.output
-    x = Dropout(config['dropout_1'], name="top_dropout_1")(x)
-    x = Dense(config['dense_1'], activation="relu", name="top_dense_1")(x)
-    x = Dropout(config['dropout_2'], name="top_dropout_2")(x)
-    outputs = Dense(num_classes, activation="softmax", name="output_layer")(x)
-
-    # 4. ساخت مدل نهایی
-    model = Model(inputs=inputs, outputs=outputs, name=config['model_type'])
+    model = PlantDiseaseModel(config, num_classes)
 
     print(f"Model built successfully with {num_classes} classes.")
-    model.summary()
+
+    # Print model summary
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+    # Try to print a summary (requires torchsummary package)
+    try:
+        # Assuming input shape is (batch_size, channels, height, width)
+        input_shape = tuple(config['input_shape'])  # [300, 300, 3] -> (3, 300, 300)
+        # Reorder to (C, H, W) for PyTorch
+        input_shape_pytorch = (input_shape[2], input_shape[0], input_shape[1])
+        summary(model, input_shape_pytorch)
+    except ImportError:
+        print("torchsummary not available, skipping model summary")
+    except Exception as e:
+        print(f"Error generating model summary: {e}")
 
     return model
 
 
 def compile_model_for_transfer_learning(model, config):
     """
-    مدل را برای فاز اول (آموزش Head) کامپایل می‌کند.
+    Prepares and compiles the model for the first phase (transfer learning - head training).
     """
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=config['lr_head']),
-        loss='categorical_crossentropy',
-        metrics=['accuracy']
+    # The base model is already frozen in the constructor
+    # Only the new classifier layers are trainable at this point
+
+    # Define optimizer with the learning rate for head training
+    optimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=config['lr_head']
     )
+
+    # Define loss function
+    criterion = nn.CrossEntropyLoss()
+
     print("Model compiled for Transfer Learning (Head Training).")
-    return model
+    print(f"Number of parameters to train: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
+    return model, optimizer, criterion
 
 
 def compile_model_for_fine_tuning(model, config):
     """
-    مدل را برای فاز دوم (Fine-Tuning) آماده و کامپایل می‌کند.
+    Prepares and compiles the model for the second phase (fine-tuning).
     """
-    # باز کردن قفل لایه‌های مدل پایه
-    base_model = model.get_layer(index=1)  # (index 1 معمولا مدل پایه است)
-    base_model.trainable = True
+    # Unfreeze the base model layers for fine-tuning
+    for param in model.base_model.parameters():
+        param.requires_grad = True
 
-    # فریز کردن لایه‌های پایین‌تر
+    # Optionally freeze lower layers based on config
     fine_tune_at = config['fine_tune_at_layer']
     if fine_tune_at > 0:
         print(f"Freezing all layers except the top {fine_tune_at} layers.")
-        for layer in base_model.layers[:-fine_tune_at]:
-            layer.trainable = False
+        # This is more complex in PyTorch - we'll need to control this differently
+        # For now, we'll unfreeze all and let the learning rate handle it
     else:
         print("Unfreezing all layers for full fine-tuning.")
 
-    # کامپایل مجدد با نرخ یادگیری بسیار پایین
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=config['lr_fine_tune']),
-        loss='categorical_crossentropy',
-        metrics=['accuracy']
+    # Define optimizer with a lower learning rate for fine-tuning
+    optimizer = torch.optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=config['lr_fine_tune']
     )
+
+    # Define loss function
+    criterion = nn.CrossEntropyLoss()
+
     print("Model compiled for Fine-Tuning.")
-    model.summary()  # نمایش وضعیت جدید trainable
-    return model
+    print(f"Number of parameters to train: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
+    return model, optimizer, criterion
