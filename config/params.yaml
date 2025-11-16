@@ -6,7 +6,8 @@ experiment_name: "EfficientNetV2B3_v1"
 
 # 2. Data Settings
 # (مسیر دیتاستی که در آن پوشه‌های هر کلاس قرار دارند)
-data_dir: "data/plant_village_dataset"
+data_dir: "data/PlantVillage"
+#data_dir: "data/flowers"
 validation_split: 0.2
 seed: 42
 
