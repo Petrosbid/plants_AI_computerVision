@@ -10,6 +10,7 @@ A computer vision project for plant disease detection using PyTorch and transfer
 - MLflow integration for experiment tracking
 - Data augmentation and preprocessing
 - GPU acceleration support
+- Progress monitoring with `tqdm` for training and validation
 
 ## Requirements
 

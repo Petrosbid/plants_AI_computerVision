@@ -31,9 +31,9 @@ lr_head: 0.001
 epochs_head: 15
 
 # 6. Training Phase 2: Fine-Tuning
-fine_tune_at_layer: 100 # (100 لایه آخر را باز می‌کند)
+fine_tune_at_layer: 10 # (Only unfreeze the top 10 layers for fine-tuning)
 lr_fine_tune: 0.00001 # (1e-5)
-epochs_fine_tune: 30 # (تعداد کل اپوک‌ها، مثلا 15+30=45)
+epochs_fine_tune: 15 # (Reduced from 30 since fine-tuning should be faster)
 
 # 7. Callbacks
 early_stopping_patience: 10

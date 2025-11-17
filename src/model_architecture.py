@@ -99,18 +99,26 @@ def compile_model_for_fine_tuning(model, config):
     """
     Prepares and compiles the model for the second phase (fine-tuning).
     """
-    # Unfreeze the base model layers for fine-tuning
-    for param in model.base_model.parameters():
-        param.requires_grad = True
-
-    # Optionally freeze lower layers based on config
     fine_tune_at = config['fine_tune_at_layer']
+
+    # First, freeze all layers in the base model
+    for param in model.base_model.parameters():
+        param.requires_grad = False
+
     if fine_tune_at > 0:
-        print(f"Freezing all layers except the top {fine_tune_at} layers.")
-        # This is more complex in PyTorch - we'll need to control this differently
-        # For now, we'll unfreeze all and let the learning rate handle it
+        print(f"Unfreezing the last {fine_tune_at} layers of the base model for fine-tuning.")
+        # Get all the named modules in the base model
+        modules = list(model.base_model.named_modules())
+
+        # Unfreeze the last N modules
+        for name, module in modules[-fine_tune_at:]:
+            for param in module.parameters():
+                param.requires_grad = True
     else:
         print("Unfreezing all layers for full fine-tuning.")
+        # Unfreeze all layers in the base model
+        for param in model.base_model.parameters():
+            param.requires_grad = True
 
     # Define optimizer with a lower learning rate for fine-tuning
     optimizer = torch.optim.Adam(
